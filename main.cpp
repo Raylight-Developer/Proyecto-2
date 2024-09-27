@@ -1,9 +1,11 @@
 #include <iostream>
 #include <iomanip>
+#include <random>
 #include <vector>
 
 #include <windows.h>
 #include <bcrypt.h>
+#include <mpi.h>
 
 #pragma comment(lib, "bcrypt.lib")
 #define STATUS_SUCCESS ((NTSTATUS)0x00000000L)
@@ -71,13 +73,20 @@ bool tryKey(const std::vector<BYTE>& ciphertext, std::string& decryptedText, BCR
 	return true;
 }
 
-std::vector<BCRYPT_KEY_HANDLE> generateKeys(BCRYPT_ALG_HANDLE hAlgorithm, const uint64_t& amount) {
+std::vector<BCRYPT_KEY_HANDLE> generateRandomKeys(BCRYPT_ALG_HANDLE hAlgorithm, const uint64_t& amount) {
 	std::vector<BCRYPT_KEY_HANDLE> keys;
 
 	BYTE keyBytes[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
-	for (uint64_t j = 0; j < 256; ++j) {
-		keyBytes[7] = static_cast<BYTE>(j);
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_int_distribution<int> dis(0, 255);
+
+
+	for (uint64_t i = 0; i < amount; ++i) {
+		for (int j = 0; j < 8; ++j) {
+			keyBytes[j] = static_cast<BYTE>(dis(gen));
+		}
 		BCRYPT_KEY_HANDLE hKey = nullptr;
 
 		NTSTATUS status = BCryptGenerateSymmetricKey(hAlgorithm, &hKey, nullptr, 0, keyBytes, sizeof(keyBytes), 0);
@@ -88,8 +97,29 @@ std::vector<BCRYPT_KEY_HANDLE> generateKeys(BCRYPT_ALG_HANDLE hAlgorithm, const 
 
 		keys.push_back(hKey);
 	}
-	std::cout << "Generated [" << keys.size() << "] Keys" << std::endl;
+	return keys;
+}
 
+std::vector<BCRYPT_KEY_HANDLE> generateOrderedKeys(BCRYPT_ALG_HANDLE hAlgorithm, const uint64_t& amount) {
+	std::vector<BCRYPT_KEY_HANDLE> keys;
+
+	BYTE keyBytes[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+
+	for (uint64_t i = 0; i < amount; ++i) {
+		for (int j = 0; j < 8; ++j) {
+			keyBytes[7-j] = static_cast<BYTE>((i >> (56 - j * 8)) & 0xFF);
+		}
+
+		BCRYPT_KEY_HANDLE hKey = nullptr;
+
+		NTSTATUS status = BCryptGenerateSymmetricKey(hAlgorithm, &hKey, nullptr, 0, keyBytes, sizeof(keyBytes), 0);
+		if (status != STATUS_SUCCESS) {
+			std::cerr << "BCryptGenerateSymmetricKey failed: " << status << std::endl;
+			continue;
+		}
+
+		keys.push_back(hKey);
+	}
 	return keys;
 }
 
@@ -106,7 +136,7 @@ int main() {
 	}
 
 	// Step 2: Generate a symmetric key
-	BYTE keyBytes[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x25 };
+	BYTE keyBytes[8] = { 0x25, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 	status = BCryptGenerateSymmetricKey(hAlgorithm, &hKey, nullptr, 0, keyBytes, sizeof(keyBytes), 0);
 	if (status != STATUS_SUCCESS) {
 		std::cerr << "BCryptGenerateSymmetricKey failed: " << status << std::endl;
@@ -124,7 +154,11 @@ int main() {
 		return 1;
 	}
 
-	std::cout << "Key: " << hKey << std::endl;
+	std::cout << "Key: [ " << hKey << " ] | [ ";
+	for (BYTE b : keyBytes) {
+		printf("%02X ", b);
+	}
+	std::cout << "]" << std::endl;
 	std::cout << "Encrypted data: ";
 	for (BYTE b : ciphertext) {
 		printf("%02X ", b);
@@ -144,11 +178,15 @@ int main() {
 
 	// Step 5: Brute force
 	std::string bruteDecryptedText;
-	std::vector<BCRYPT_KEY_HANDLE> hKeys = generateKeys(hAlgorithm, 1024);
+	std::vector<BCRYPT_KEY_HANDLE> hKeys = generateOrderedKeys(hAlgorithm, 1024);
 	for (BCRYPT_KEY_HANDLE key : hKeys) {
 		if (tryKey(ciphertext, bruteDecryptedText, key)) {
 			if (bruteDecryptedText == plaintext) {
-				std::cout << "BruteForce Decrypted with key [" << key << "] -> " << bruteDecryptedText << std::endl;
+				std::cout << "BruteForce Decrypted with key: [ " << hKey << " ] | [ ";
+				for (BYTE b : keyBytes) {
+					printf("%02X ", b);
+				}
+				std::cout << "] -> " << bruteDecryptedText << std::endl;
 				break;
 			}
 		}
