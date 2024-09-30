@@ -2,6 +2,7 @@
 #include <iomanip>
 #include <random>
 #include <vector>
+#include <chrono>
 
 #include <windows.h>
 #include <bcrypt.h>
@@ -9,6 +10,9 @@
 
 #pragma comment(lib, "bcrypt.lib")
 #define STATUS_SUCCESS ((NTSTATUS)0x00000000L)
+
+#define BOTH true
+#define SEQUENTIAL false
 
 bool EncryptDES(const std::string& plaintext, std::vector<BYTE>& ciphertext, BCRYPT_KEY_HANDLE hKey) {
 	DWORD dataLen = static_cast<DWORD>(plaintext.size());
@@ -106,7 +110,7 @@ std::vector<BCRYPT_KEY_HANDLE> generateOrderedKeys(BCRYPT_ALG_HANDLE hAlgorithm,
 	BYTE keyBytes[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
 	for (uint64_t i = 0; i < amount; ++i) {
-		for (int j = 0; j < 8; ++j) {
+		for (uint64_t j = 0; j < 8; ++j) {
 			keyBytes[7-j] = static_cast<BYTE>((i >> (56 - j * 8)) & 0xFF);
 		}
 
@@ -123,78 +127,342 @@ std::vector<BCRYPT_KEY_HANDLE> generateOrderedKeys(BCRYPT_ALG_HANDLE hAlgorithm,
 	return keys;
 }
 
-int main() {
-	BCRYPT_ALG_HANDLE hAlgorithm;
-	BCRYPT_KEY_HANDLE hKey;
-	NTSTATUS status;
+std::vector<BCRYPT_KEY_HANDLE> generateOrderedKeys(BCRYPT_ALG_HANDLE hAlgorithm, uint64_t start, uint64_t end) {
+	std::vector<BCRYPT_KEY_HANDLE> keys;
 
-	// Step 1: Open a DES algorithm provider
-	status = BCryptOpenAlgorithmProvider(&hAlgorithm, BCRYPT_DES_ALGORITHM, nullptr, 0);
-	if (status != STATUS_SUCCESS) {
-		std::cerr << "BCryptOpenAlgorithmProvider failed: " << status << std::endl;
-		return 1;
+	BYTE keyBytes[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+
+	for (uint64_t i = start; i < end; ++i) {
+		for (uint64_t j = 0; j < 8; ++j) {
+			keyBytes[7-j] = static_cast<BYTE>((i >> (56 - j * 8)) & 0xFF);
+		}
+
+		BCRYPT_KEY_HANDLE hKey = nullptr;
+		NTSTATUS status = BCryptGenerateSymmetricKey(hAlgorithm, &hKey, nullptr, 0, keyBytes, sizeof(keyBytes), 0);
+		if (status != STATUS_SUCCESS) {
+			std::cerr << "BCryptGenerateSymmetricKey failed: " << status << std::endl;
+			continue;
+		}
+
+		keys.push_back(hKey);
 	}
+	return keys;
+}
 
-	// Step 2: Generate a symmetric key
-	BYTE keyBytes[8] = { 0x25, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-	status = BCryptGenerateSymmetricKey(hAlgorithm, &hKey, nullptr, 0, keyBytes, sizeof(keyBytes), 0);
-	if (status != STATUS_SUCCESS) {
-		std::cerr << "BCryptGenerateSymmetricKey failed: " << status << std::endl;
-		BCryptCloseAlgorithmProvider(hAlgorithm, 0);
-		return 1;
-	}
+#if BOTH == true
+	int main(int argc, char** argv) {
+		std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
 
-	// Step 3: Encrypt the plaintext
-	std::string plaintext = "Hello, DES Encryption!";
-	std::vector<BYTE> ciphertext;
-	if (!EncryptDES(plaintext, ciphertext, hKey)) {
-		std::cerr << "Encryption failed" << std::endl;
-		BCryptDestroyKey(hKey);
-		BCryptCloseAlgorithmProvider(hAlgorithm, 0);
-		return 1;
-	}
+		BCRYPT_ALG_HANDLE hAlgorithm;
+		BCRYPT_KEY_HANDLE hKey;
+		NTSTATUS status;
 
-	std::cout << "Key: [ " << hKey << " ] | [ ";
-	for (BYTE b : keyBytes) {
-		printf("%02X ", b);
-	}
-	std::cout << "]" << std::endl;
-	std::cout << "Encrypted data: ";
-	for (BYTE b : ciphertext) {
-		printf("%02X ", b);
-	}
-	std::cout << std::endl;
+		// Step 1: Open a DES algorithm provider
+		status = BCryptOpenAlgorithmProvider(&hAlgorithm, BCRYPT_DES_ALGORITHM, nullptr, 0);
+		if (status != STATUS_SUCCESS) {
+			std::cerr << "BCryptOpenAlgorithmProvider failed: " << status << std::endl;
+			return 1;
+		}
 
-	// Step 4: Decrypt the ciphertext
-	std::string decryptedText;
-	if (!DecryptDES(ciphertext, decryptedText, hKey)) {
-		std::cerr << "Decryption failed" << std::endl;
-		BCryptDestroyKey(hKey);
-		BCryptCloseAlgorithmProvider(hAlgorithm, 0);
-		return 1;
-	}
+		// Step 2: Generate a symmetric key
+		BYTE keyBytes[8] = { 0x25, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+		status = BCryptGenerateSymmetricKey(hAlgorithm, &hKey, nullptr, 0, keyBytes, sizeof(keyBytes), 0);
+		if (status != STATUS_SUCCESS) {
+			std::cerr << "BCryptGenerateSymmetricKey failed: " << status << std::endl;
+			BCryptCloseAlgorithmProvider(hAlgorithm, 0);
+			return 1;
+		}
 
-	std::cout << "Decrypted text: " << decryptedText << std::endl;
+		// Step 3: Encrypt the plaintext
+		std::string plaintext = "Hello, DES Encryption!";
+		std::vector<BYTE> ciphertext;
+		if (!EncryptDES(plaintext, ciphertext, hKey)) {
+			std::cerr << "Encryption failed" << std::endl;
+			BCryptDestroyKey(hKey);
+			BCryptCloseAlgorithmProvider(hAlgorithm, 0);
+			return 1;
+		}
 
-	// Step 5: Brute force
-	std::string bruteDecryptedText;
-	std::vector<BCRYPT_KEY_HANDLE> hKeys = generateOrderedKeys(hAlgorithm, 1024);
-	for (BCRYPT_KEY_HANDLE key : hKeys) {
-		if (tryKey(ciphertext, bruteDecryptedText, key)) {
-			if (bruteDecryptedText == plaintext) {
-				std::cout << "BruteForce Decrypted with key: [ " << hKey << " ] | [ ";
-				for (BYTE b : keyBytes) {
-					printf("%02X ", b);
+		std::cout << "Key [ ";
+		for (BYTE b : keyBytes) {
+			printf("%02X ", b);
+		}
+		std::cout << "]" << std::endl;
+		std::cout << "Encrypted data [ ";
+		for (BYTE b : ciphertext) {
+			printf("%02X ", b);
+		}
+		std::cout << "]" << std::endl;
+
+		// Step 4: Decrypt the ciphertext
+		std::string decryptedText;
+		if (!DecryptDES(ciphertext, decryptedText, hKey)) {
+			std::cerr << "Decryption failed" << std::endl;
+			BCryptDestroyKey(hKey);
+			BCryptCloseAlgorithmProvider(hAlgorithm, 0);
+			return 1;
+		}
+
+		std::cout << "Decrypted text -> " << decryptedText << std::endl;
+		std::cout << "--------------------------------------------------------" << std::endl;
+		{
+			// Step 5: Brute force
+			std::string bruteDecryptedText;
+			std::vector<BCRYPT_KEY_HANDLE> hKeys = generateOrderedKeys(hAlgorithm, 1024);
+			for (BCRYPT_KEY_HANDLE key : hKeys) {
+				if (tryKey(ciphertext, bruteDecryptedText, key)) {
+					if (bruteDecryptedText == plaintext) {
+						std::cout << "BruteForce  [ ";
+						for (BYTE b : keyBytes) {
+							printf("%02X ", b);
+						}
+						std::cout << "] -> " << bruteDecryptedText << std::endl;
+						break;
+					}
 				}
-				std::cout << "] -> " << bruteDecryptedText << std::endl;
-				break;
 			}
 		}
+
+		std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double> sequential_seconds = end_time - start_time;
+		std::cout << std::endl << "Sequential Delta time: " << sequential_seconds.count() << " seconds" << std::endl;
+		std::cout << "--------------------------------------------------------" << std::endl;
+
+		start_time = std::chrono::high_resolution_clock::now();
+		int rank, num_processes;
+		{
+			MPI_Init(&argc, &argv);
+
+			MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+			MPI_Comm_size(MPI_COMM_WORLD, &num_processes);
+
+			// Step 5: Brute force
+			uint64_t totalKeys = 1024;
+			uint64_t keysPerProcess = totalKeys / num_processes;
+			uint64_t start = rank * keysPerProcess;
+			uint64_t end = (rank == num_processes - 1) ? totalKeys : start + keysPerProcess;
+
+			std::string bruteDecryptedText;
+			BYTE bruteKeyBytes[8] = { 0 };
+			std::vector<BCRYPT_KEY_HANDLE> hKeys = generateOrderedKeys(hAlgorithm, start, end);
+
+			bool found = false;
+
+			// Each process tries its range of keys
+			for (BCRYPT_KEY_HANDLE key : hKeys) {
+				if (tryKey(ciphertext, bruteDecryptedText, key)) {
+					if (bruteDecryptedText == plaintext) {
+						found = true;
+						std::cout << "Process [" << rank << "] [ ";
+						for (BYTE b : keyBytes) {
+							printf("%02X ", b);
+						}
+						std::cout << "] -> " << bruteDecryptedText << std::endl;
+						break;
+					}
+				}
+			}
+			if (not found) {
+				std::cout << "Key Not Found" << std::endl;
+			}
+
+			// Clean up and finalize MPI
+			BCryptCloseAlgorithmProvider(hAlgorithm, 0);
+			MPI_Finalize();
+		}
+
+		end_time = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double> openmpi_seconds = end_time - start_time;
+		std::cout << std::endl << "Open MPI Delta time: " << openmpi_seconds.count() << " seconds" << std::endl;
+		std::cout << "--------------------------------------------------------" << std::endl;
+		std::cout << "Performance Metrics" << std::endl;
+		std::cout << "    Efficiency: " << sequential_seconds / (double(num_processes) * openmpi_seconds) << std::endl;
+		std::cout << "--------------------------------------------------------" << std::endl;
+		return 0;
 	}
+#elif SEQUENTIAL == true
+	int main(int argc, char** argv) {
+		std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
 
-	// Clean up
-	BCryptDestroyKey(hKey);
-	BCryptCloseAlgorithmProvider(hAlgorithm, 0);
+		BCRYPT_ALG_HANDLE hAlgorithm;
+		BCRYPT_KEY_HANDLE hKey;
+		NTSTATUS status;
 
-	return 0;
-}
+		// Step 1: Open a DES algorithm provider
+		status = BCryptOpenAlgorithmProvider(&hAlgorithm, BCRYPT_DES_ALGORITHM, nullptr, 0);
+		if (status != STATUS_SUCCESS) {
+			std::cerr << "BCryptOpenAlgorithmProvider failed: " << status << std::endl;
+			return 1;
+		}
+
+		// Step 2: Generate a symmetric key
+		BYTE keyBytes[8] = { 0x25, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+		status = BCryptGenerateSymmetricKey(hAlgorithm, &hKey, nullptr, 0, keyBytes, sizeof(keyBytes), 0);
+		if (status != STATUS_SUCCESS) {
+			std::cerr << "BCryptGenerateSymmetricKey failed: " << status << std::endl;
+			BCryptCloseAlgorithmProvider(hAlgorithm, 0);
+			return 1;
+		}
+
+		// Step 3: Encrypt the plaintext
+		std::string plaintext = "Hello, DES Encryption!";
+		std::vector<BYTE> ciphertext;
+		if (!EncryptDES(plaintext, ciphertext, hKey)) {
+			std::cerr << "Encryption failed" << std::endl;
+			BCryptDestroyKey(hKey);
+			BCryptCloseAlgorithmProvider(hAlgorithm, 0);
+			return 1;
+		}
+
+		std::cout << "Key [ ";
+		for (BYTE b : keyBytes) {
+			printf("%02X ", b);
+		}
+		std::cout << "]" << std::endl;
+		std::cout << "Encrypted data [ ";
+		for (BYTE b : ciphertext) {
+			printf("%02X ", b);
+		}
+		std::cout << "]" << std::endl;
+
+		// Step 4: Decrypt the ciphertext
+		std::string decryptedText;
+		if (!DecryptDES(ciphertext, decryptedText, hKey)) {
+			std::cerr << "Decryption failed" << std::endl;
+			BCryptDestroyKey(hKey);
+			BCryptCloseAlgorithmProvider(hAlgorithm, 0);
+			return 1;
+		}
+
+		std::cout << "Decrypted text -> " << decryptedText << std::endl;
+		std::cout << "--------------------------------------------------------" << std::endl;
+
+		// Step 5: Brute force
+		std::string bruteDecryptedText;
+		std::vector<BCRYPT_KEY_HANDLE> hKeys = generateOrderedKeys(hAlgorithm, 1024);
+		for (BCRYPT_KEY_HANDLE key : hKeys) {
+			if (tryKey(ciphertext, bruteDecryptedText, key)) {
+				if (bruteDecryptedText == plaintext) {
+					std::cout << "BruteForce  [ ";
+					for (BYTE b : keyBytes) {
+						printf("%02X ", b);
+					}
+					std::cout << "] -> " << bruteDecryptedText << std::endl;
+					break;
+				}
+			}
+		}
+
+		// Clean up
+		BCryptDestroyKey(hKey);
+		BCryptCloseAlgorithmProvider(hAlgorithm, 0);
+
+		std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double> delta_seconds = end_time - start_time;
+		std::cout << std::endl << "Delta time: " << delta_seconds.count() << " seconds" << std::endl;
+		std::cout << "--------------------------------------------------------" << std::endl;
+		return 0;
+	}
+#else
+	int main(int argc, char** argv) {
+		std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
+		MPI_Init(&argc, &argv);
+
+		int rank, size;
+		MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+		MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+		BCRYPT_ALG_HANDLE hAlgorithm;
+		BCRYPT_KEY_HANDLE hKey;
+		NTSTATUS status;
+
+		// Step 1: Open a DES algorithm provider
+		status = BCryptOpenAlgorithmProvider(&hAlgorithm, BCRYPT_DES_ALGORITHM, nullptr, 0);
+		if (status != STATUS_SUCCESS) {
+			std::cerr << "BCryptOpenAlgorithmProvider failed: " << status << std::endl;
+			return 1;
+		}
+
+		// Step 2: Generate a symmetric key
+		BYTE keyBytes[8] = { 0x25, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+		status = BCryptGenerateSymmetricKey(hAlgorithm, &hKey, nullptr, 0, keyBytes, sizeof(keyBytes), 0);
+		if (status != STATUS_SUCCESS) {
+			std::cerr << "BCryptGenerateSymmetricKey failed: " << status << std::endl;
+			BCryptCloseAlgorithmProvider(hAlgorithm, 0);
+			return 1;
+		}
+
+		// Step 3: Encrypt the plaintext
+		std::string plaintext = "Hello, DES Encryption!";
+		std::vector<BYTE> ciphertext;
+		if (!EncryptDES(plaintext, ciphertext, hKey)) {
+			std::cerr << "Encryption failed" << std::endl;
+			BCryptDestroyKey(hKey);
+			BCryptCloseAlgorithmProvider(hAlgorithm, 0);
+			return 1;
+		}
+
+		std::cout << "Key [ ";
+		for (BYTE b : keyBytes) {
+			printf("%02X ", b);
+		}
+		std::cout << "]" << std::endl;
+		std::cout << "Encrypted data [ ";
+		for (BYTE b : ciphertext) {
+			printf("%02X ", b);
+		}
+		std::cout << "]" << std::endl;
+
+		// Step 4: Decrypt the ciphertext
+		std::string decryptedText;
+		if (!DecryptDES(ciphertext, decryptedText, hKey)) {
+			std::cerr << "Decryption failed" << std::endl;
+			BCryptDestroyKey(hKey);
+			BCryptCloseAlgorithmProvider(hAlgorithm, 0);
+			return 1;
+		}
+
+		std::cout << "Decrypted text -> " << decryptedText << std::endl;
+		std::cout << "--------------------------------------------------------" << std::endl;
+
+		// Step 5: Brute force
+		uint64_t totalKeys = 1024;
+		uint64_t keysPerProcess = totalKeys / size;
+		uint64_t start = rank * keysPerProcess;
+		uint64_t end = (rank == size - 1) ? totalKeys : start + keysPerProcess;
+
+		std::string bruteDecryptedText;
+		BYTE bruteKeyBytes[8] = { 0 };
+		std::vector<BCRYPT_KEY_HANDLE> hKeys = generateOrderedKeys(hAlgorithm, start, end);
+
+		bool found = false;
+
+		// Each process tries its range of keys
+		for (BCRYPT_KEY_HANDLE key : hKeys) {
+			if (tryKey(ciphertext, bruteDecryptedText, key)) {
+				if (bruteDecryptedText == plaintext) {
+					found = true;
+					std::cout << "Process [" << rank << "] [ ";
+					for (BYTE b : keyBytes) {
+						printf("%02X ", b);
+					}
+					std::cout << "] -> " << bruteDecryptedText << std::endl;
+					break;
+				}
+			}
+		}
+		if (not found) {
+			std::cout << "Key Not Found" << std::endl;
+		}
+
+		// Clean up and finalize MPI
+		BCryptCloseAlgorithmProvider(hAlgorithm, 0);
+		MPI_Finalize();
+
+		std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double> delta_seconds = end_time - start_time;
+		std::cout << std::endl << "Delta time: " << delta_seconds.count() << " seconds" << std::endl;
+		std::cout << "--------------------------------------------------------" << std::endl;
+		return 0;
+	}
+#endif
