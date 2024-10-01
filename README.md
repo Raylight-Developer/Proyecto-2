@@ -1,0 +1,3 @@
+```bash
+mpiexec -np 8 ./Proyecto-2.exe --parallel false --sequential false --random false --key-count 1048576 --key 0xFF 0xFF 0xFF 0x00 0x00 0x00 0x00 0x00
+```
