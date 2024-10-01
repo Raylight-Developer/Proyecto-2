@@ -133,11 +133,11 @@ int main(int argc, char** argv) {
 
 	for (int i = 1; i < argc; ++i) {
 		if (strcmp(argv[i], "--parallel") == 0 && i + 1 < argc) {
-			parallel = argv[++i] == "true" ? true : false;
+			parallel = std::stoi(argv[++i]);
 		} else if (strcmp(argv[i], "--sequential") == 0 && i + 1 < argc) {
-			sequential = argv[++i] == "true" ? true : false;
-		} else if (strcmp(argv[i], "--random") == 0 && i + 1 < argc) {
-			random_keys = argv[++i] == "true" ? true : false;
+			sequential = std::stoi(argv[++i]);
+		 }else if (strcmp(argv[i], "--random") == 0 && i + 1 < argc) {
+			random_keys = std::stoi(argv[++i]);
 		} else if (strcmp(argv[i], "--key-count") == 0 && i + 1 < argc) {
 			key_count = std::stoull(argv[++i]);
 		} else if (strcmp(argv[i], "--key") == 0 && i + 8 < argc) {
