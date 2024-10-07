@@ -12,6 +12,17 @@
 #pragma comment(lib, "bcrypt.lib")
 #define STATUS_SUCCESS ((NTSTATUS)0x00000000L)
 
+/**
+ * @brief Encrypts the given plaintext using the DES algorithm.
+ * 
+ * This function encrypts the input plaintext using a provided key handle and stores the resulting
+ * ciphertext in the output vector.
+ * 
+ * @param plaintext The text to be encrypted.
+ * @param ciphertext A reference to a vector where the encrypted data will be stored.
+ * @param hKey The handle to the key used for encryption.
+ * @return true if encryption was successful, false otherwise.
+ */
 bool EncryptDES(const std::string& plaintext, std::vector<BYTE>& ciphertext, BCRYPT_KEY_HANDLE hKey) {
 	DWORD dataLen = static_cast<DWORD>(plaintext.size());
 	DWORD bufferSize = dataLen;
@@ -36,6 +47,18 @@ bool EncryptDES(const std::string& plaintext, std::vector<BYTE>& ciphertext, BCR
 	return true;
 }
 
+
+/**
+ * @brief Decrypts the given ciphertext using the DES algorithm.
+ * 
+ * This function decrypts the input ciphertext using a provided key handle and stores the resulting
+ * plaintext in the output string.
+ * 
+ * @param ciphertext The encrypted data to be decrypted.
+ * @param plaintext A reference to a string where the decrypted data will be stored.
+ * @param hKey The handle to the key used for decryption.
+ * @return true if decryption was successful, false otherwise.
+ */
 bool DecryptDES(const std::vector<BYTE>& ciphertext, std::string& plaintext, BCRYPT_KEY_HANDLE hKey) {
 	DWORD dataLen = static_cast<DWORD>(ciphertext.size());
 	std::vector<BYTE> buffer = ciphertext;
@@ -57,6 +80,17 @@ bool DecryptDES(const std::vector<BYTE>& ciphertext, std::string& plaintext, BCR
 	return true;
 }
 
+/**
+ * @brief Attempts to decrypt the ciphertext with the given key.
+ * 
+ * This function attempts to decrypt the given ciphertext using a provided key handle.
+ * If decryption is successful, the resulting plaintext is stored in the decryptedText.
+ * 
+ * @param ciphertext The encrypted data to attempt decryption on.
+ * @param decryptedText A reference to a string where the decrypted data will be stored if decryption succeeds.
+ * @param hKey The handle to the key used for decryption.
+ * @return true if decryption was successful, false otherwise.
+ */
 bool tryKey(const std::vector<BYTE>& ciphertext, std::string& decryptedText, BCRYPT_KEY_HANDLE hKey) {
 	DWORD dataLen = static_cast<DWORD>(ciphertext.size());
 	std::vector<BYTE> buffer = ciphertext;
