@@ -60,24 +60,31 @@ bool EncryptDES(const std::string& plaintext, std::vector<BYTE>& ciphertext, BCR
  * @return true if decryption was successful, false otherwise.
  */
 bool DecryptDES(const std::vector<BYTE>& ciphertext, std::string& plaintext, BCRYPT_KEY_HANDLE hKey) {
-	DWORD dataLen = static_cast<DWORD>(ciphertext.size());
-	std::vector<BYTE> buffer = ciphertext;
+    // Obtener la longitud de los datos cifrados
+    DWORD dataLen = static_cast<DWORD>(ciphertext.size());
+    // Crear un buffer que contendrá los datos cifrados
+    std::vector<BYTE> buffer = ciphertext;
 
-	ULONG resultSize = 0;
-	if (BCryptDecrypt(hKey, (PUCHAR)buffer.data(), dataLen, nullptr, nullptr, 0, nullptr, 0, &resultSize, BCRYPT_BLOCK_PADDING) != STATUS_SUCCESS) {
-		std::cerr << "BCryptDecrypt (size estimation) failed." << std::endl;
-		return false;
-	}
+    ULONG resultSize = 0; // Variable para almacenar el tamaño del resultado
 
-	buffer.resize(resultSize);
+    // Estimación del tamaño del resultado del descifrado
+    if (BCryptDecrypt(hKey, (PUCHAR)buffer.data(), dataLen, nullptr, nullptr, 0, nullptr, 0, &resultSize, BCRYPT_BLOCK_PADDING) != STATUS_SUCCESS) {
+        std::cerr << "BCryptDecrypt (size estimation) failed." << std::endl; // Error al estimar el tamaño
+        return false; // Salir con error
+    }
 
-	if (BCryptDecrypt(hKey, (PUCHAR)buffer.data(), dataLen, nullptr, nullptr, 0, buffer.data(), resultSize, &resultSize, BCRYPT_BLOCK_PADDING) != STATUS_SUCCESS) {
-		std::cerr << "BCryptDecrypt failed." << std::endl;
-		return false;
-	}
+    // Redimensionar el buffer para el resultado del descifrado
+    buffer.resize(resultSize);
 
-	plaintext.assign(buffer.begin(), buffer.begin() + resultSize);
-	return true;
+    // Desencriptar los datos cifrados
+    if (BCryptDecrypt(hKey, (PUCHAR)buffer.data(), dataLen, nullptr, nullptr, 0, buffer.data(), resultSize, &resultSize, BCRYPT_BLOCK_PADDING) != STATUS_SUCCESS) {
+        std::cerr << "BCryptDecrypt failed." << std::endl; // Error en el descifrado
+        return false; // Salir con error
+    }
+
+    // Asignar el texto descifrado a la variable de salida
+    plaintext.assign(buffer.begin(), buffer.begin() + resultSize);
+    return true; 
 }
 
 /**
