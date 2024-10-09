@@ -282,7 +282,7 @@ int main(int argc, char** argv) {
 
 		std::chrono::high_resolution_clock::time_point start_time;
 		std::chrono::high_resolution_clock::time_point end_time;
-		std::chrono::duration<double> sequential_seconds;
+		double sequential_seconds;
 
 		if (rank == 0) {
 			std::cout << "Key [ ";
@@ -338,9 +338,9 @@ int main(int argc, char** argv) {
 			}
 
 			end_time = std::chrono::high_resolution_clock::now();
-			sequential_seconds = end_time - start_time;
+			sequential_seconds = std::chrono::duration<double>(end_time - start_time).count();
 
-			std::cout << std::endl << "Sequential Delta time: " << sequential_seconds.count() << " seconds" << std::endl;
+			std::cout << std::endl << "Sequential Delta time: " << sequential_seconds << " seconds" << std::endl;
 			std::cout << "--------------------------------------------------------" << std::endl;
 		}
 		MPI_Barrier(MPI_COMM_WORLD);
@@ -401,11 +401,13 @@ int main(int argc, char** argv) {
 		end_time = std::chrono::high_resolution_clock::now();
 
 		if (rank == 0) {
-			std::chrono::duration<double> openmpi_seconds = end_time - start_time;
-			std::cout << std::endl << "Open MPI Delta time: " << openmpi_seconds.count() << " seconds" << std::endl;
+			double openmpi_seconds = std::chrono::duration<double> (end_time - start_time).count();
+			std::cout << std::endl << "Open MPI Delta time: " << openmpi_seconds << " seconds" << std::endl;
 			std::cout << "--------------------------------------------------------" << std::endl;
 			std::cout << "Performance Metrics" << std::endl;
-			std::cout << "    Efficiency: " << sequential_seconds / (double(num_processes) * openmpi_seconds) << std::endl;
+			std::cout << std::setprecision(2) << "    Speedup: " << (sequential_seconds / openmpi_seconds) * 100.0 - 100.0 << "%" << std::endl;
+			std::cout << std::setprecision(5) << "    Efficiency: " << sequential_seconds / (double(num_processes) * openmpi_seconds) << std::endl;
+			std::cout << std::setprecision(5) << "    Effectivity: " << (sequential_seconds / openmpi_seconds) / (double(num_processes) * openmpi_seconds) << std::endl;
 			std::cout << "--------------------------------------------------------" << std::endl;
 		}
 		return 0;
