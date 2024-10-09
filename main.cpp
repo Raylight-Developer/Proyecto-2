@@ -1,5 +1,21 @@
 #include "Crypt.hpp"
 
+void showProgressBar(const float& progress) {
+	int barWidth = 50;
+	std::cout << "[";
+	int pos = barWidth * progress;
+	for (int i = 0; i < barWidth; ++i) {
+		if (i < pos)
+			std::cout << "=";
+		else if (i == pos)
+			std::cout << ">";
+		else
+			std::cout << " ";
+	}
+	std::cout << "] " << int(progress * 100.0) << " %\r";
+	std::cout.flush();
+}
+
 int main(int argc, char** argv) {
 	bool parallel = false;
 	bool sequential = false;
@@ -118,11 +134,19 @@ int main(int argc, char** argv) {
 			int found = 0;
 			int global_found = 0;
 			start_time = std::chrono::high_resolution_clock::now();
+			float lastProgress = 0.0f;
 			for (uint64_t i = rank * key_step; i < key_count; i += num_processes) {
+				float currentProgress = static_cast<float>(i) / key_count;
+				if (currentProgress - lastProgress >= 0.02) {
+					if (rank == 0) {
+						showProgressBar(currentProgress); // Update progress bar
+					}
+					lastProgress = currentProgress; // Update last displayed progress
+				}
 				BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_gen_mode);
 				if (tryKey(ciphertext, bruteDecryptedText, key)) {
 					if (bruteDecryptedText == text) {
-						std::cout << "Process [" << rank << "] [" << i << "] [ ";
+						std::cout << std::endl << "Process [" << rank << "] [" << i << "] [ ";
 						for (BYTE b : keyBytes) {
 							printf("%02X ", b);
 						}
@@ -137,7 +161,8 @@ int main(int argc, char** argv) {
 				}
 			}
 			if (global_found == 0 and rank == 0) {
-				std::cout << "Key Not Found" << std::endl;
+				showProgressBar(1.0f);
+				std::cout << std::endl << "Key Not Found" << std::endl;
 			}
 
 			// Clean up and finalize MPI
@@ -208,13 +233,19 @@ int main(int argc, char** argv) {
 
 		// Step 5: Brute force
 		bool found = false;
+		float lastProgress = 0.0f;
 		std::string bruteDecryptedText;
 		std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
 		for (uint64_t i = 0; i < key_count; i += key_step) {
+			float currentProgress = static_cast<float>(i) / key_count;
+			if (currentProgress - lastProgress >= 0.02) {
+				showProgressBar(currentProgress); // Update progress bar
+				lastProgress = currentProgress; // Update last displayed progress
+			}
 			BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_gen_mode);
 			if (tryKey(ciphertext, bruteDecryptedText, key)) {
 				if (bruteDecryptedText == text) {
-					std::cout << "BruteForce [" << i << "] [ ";
+					std::cout << std::endl << "BruteForce [" << i << "] [ ";
 					for (BYTE b : keyBytes) {
 						printf("%02X ", b);
 					}
@@ -226,7 +257,8 @@ int main(int argc, char** argv) {
 			delete key;
 		}
 		if (not found) {
-			std::cout << "Key Not Found" << std::endl;
+			showProgressBar(1.0f);
+			std::cout << std::endl << "Key Not Found" << std::endl;
 		}
 
 		std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
@@ -302,16 +334,20 @@ int main(int argc, char** argv) {
 			std::cout << "Decrypted text -> " << decryptedText << std::endl;
 			std::cout << "--------------------------------------------------------" << std::endl;
 
-			// Step 5: Brute force
 			bool found = false;
+			float lastProgress = 0.0f;
 			std::string bruteDecryptedText;
-
-			start_time = std::chrono::high_resolution_clock::now();
+			std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
 			for (uint64_t i = 0; i < key_count; i += key_step) {
+				float currentProgress = static_cast<float>(i) / key_count;
+				if (currentProgress - lastProgress >= 0.02) {
+					showProgressBar(currentProgress); // Update progress bar
+					lastProgress = currentProgress; // Update last displayed progress
+				}
 				BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_gen_mode);
 				if (tryKey(ciphertext, bruteDecryptedText, key)) {
 					if (bruteDecryptedText == text) {
-						std::cout << "BruteForce [" << i << "] [ ";
+						std::cout << std::endl << "BruteForce [" << i << "] [ ";
 						for (BYTE b : keyBytes) {
 							printf("%02X ", b);
 						}
@@ -323,7 +359,8 @@ int main(int argc, char** argv) {
 				delete key;
 			}
 			if (not found) {
-				std::cout << "Key Not Found" << std::endl;
+				showProgressBar(1.0f);
+				std::cout << std::endl << "Key Not Found" << std::endl;
 			}
 
 			end_time = std::chrono::high_resolution_clock::now();
@@ -340,11 +377,19 @@ int main(int argc, char** argv) {
 			int found = 0;
 			int global_found = 0;
 			start_time = std::chrono::high_resolution_clock::now();
+			float lastProgress = 0.0f;
 			for (uint64_t i = rank * key_step; i < key_count; i += num_processes) {
+				float currentProgress = static_cast<float>(i) / key_count;
+				if (currentProgress - lastProgress >= 0.02) {
+					if (rank == 0) {
+						showProgressBar(currentProgress); // Update progress bar
+					}
+					lastProgress = currentProgress; // Update last displayed progress
+				}
 				BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_gen_mode);
 				if (tryKey(ciphertext, bruteDecryptedText, key)) {
 					if (bruteDecryptedText == text) {
-						std::cout << "Process [" << rank << "] [" << i << "] [ ";
+						std::cout << std::endl << "Process [" << rank << "] [" << i << "] [ ";
 						for (BYTE b : keyBytes) {
 							printf("%02X ", b);
 						}
@@ -359,7 +404,8 @@ int main(int argc, char** argv) {
 				}
 			}
 			if (global_found == 0 and rank == 0) {
-				std::cout << "Key Not Found" << std::endl;
+				showProgressBar(1.0f);
+				std::cout << std::endl << "Key Not Found" << std::endl;
 			}
 
 			// Clean up and finalize MPI
