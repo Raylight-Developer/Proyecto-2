@@ -1,3 +1,13 @@
+/**
+ * @file main.cpp
+ * @brief Main entry point for DES encryption, decryption, and brute force attacks.
+ *
+ * This program encrypts and decrypts text using the DES algorithm. It also provides
+ * functionality for brute force attacks on the encrypted text, using both sequential
+ * and parallel methods (with MPI).
+ *
+ */
+
 #include <iostream>
 #include <iomanip>
 #include <random>
@@ -189,6 +199,23 @@ std::vector<BCRYPT_KEY_HANDLE> generateOrderedKeys(BCRYPT_ALG_HANDLE hAlgorithm,
 	return keys;
 }
 
+/**
+ * @brief Main function to execute the DES encryption/decryption program.
+ *
+ * This function accepts various command-line arguments to configure the program:
+ * - `--parallel` to enable MPI for parallel processing.
+ * - `--sequential` to run the brute force decryption in sequential mode.
+ * - `--random` to test random keys.
+ * - `--key-count` to specify the number of keys to be tested.
+ * - `--key` to specify a fixed 8-byte key for encryption/decryption.
+ *
+ * The program encrypts the text "Hello, DES Encryption!" and attempts to decrypt it
+ * using brute force with the keys provided.
+ *
+ * @param argc The number of command-line arguments.
+ * @param argv The array of command-line arguments.
+ * @return Returns 0 on success, or an error code if something goes wrong.
+ */
 int main(int argc, char** argv) {
 	bool parallel = false;
 	bool sequential = false;
