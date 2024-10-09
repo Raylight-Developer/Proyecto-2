@@ -63,96 +63,74 @@ bool tryKey(const std::vector<BYTE>& ciphertext, std::string& decryptedText, BCR
 	return true;
 }
 
-std::vector<BCRYPT_KEY_HANDLE> generateRandomKeys(BCRYPT_ALG_HANDLE hAlgorithm, const uint64_t& start, const uint64_t& end) {
-	std::vector<BCRYPT_KEY_HANDLE> keys;
+BCRYPT_KEY_HANDLE generateAscendingKey(BCRYPT_ALG_HANDLE hAlgorithm, const uint64_t& i) {
+	BYTE keyBytes[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
+	for (uint64_t j = 0; j < 8; ++j) {
+		keyBytes[7 - j] = static_cast<BYTE>((i >> (56 - j * 8)) & 0xFF);
+	}
+
+	BCRYPT_KEY_HANDLE hKey = nullptr;
+
+	NTSTATUS status = BCryptGenerateSymmetricKey(hAlgorithm, &hKey, nullptr, 0, keyBytes, sizeof(keyBytes), 0);
+	if (status != STATUS_SUCCESS) {
+		std::cerr << "BCryptGenerateSymmetricKey failed: " << status << std::endl;
+		return nullptr;
+	}
+
+	return hKey;
+}
+
+BCRYPT_KEY_HANDLE generateDescendingKey(BCRYPT_ALG_HANDLE hAlgorithm, const uint64_t& i) {
+	BYTE keyBytes[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+
+	for (uint64_t j = 0; j < 8; ++j) {
+		keyBytes[7 - j] = (static_cast<BYTE>((std::numeric_limits<uint64_t>::max() - i) >> (56 - j * 8)) & 0xFF);
+	}
+
+	BCRYPT_KEY_HANDLE hKey = nullptr;
+
+	NTSTATUS status = BCryptGenerateSymmetricKey(hAlgorithm, &hKey, nullptr, 0, keyBytes, sizeof(keyBytes), 0);
+	if (status != STATUS_SUCCESS) {
+		std::cerr << "BCryptGenerateSymmetricKey failed: " << status << std::endl;
+		return nullptr;
+	}
+
+	return hKey;
+}
+
+BCRYPT_KEY_HANDLE generateRandomKey(BCRYPT_ALG_HANDLE hAlgorithm) {
 	BYTE keyBytes[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
 	std::random_device rd;
 	std::mt19937 gen(rd());
 	std::uniform_int_distribution<int> dis(0, 255);
 
-
-	for (uint64_t i = start; i < end; ++i) {
-		for (int j = 0; j < 8; ++j) {
-			keyBytes[j] = static_cast<BYTE>(dis(gen));
-		}
-		BCRYPT_KEY_HANDLE hKey = nullptr;
-
-		NTSTATUS status = BCryptGenerateSymmetricKey(hAlgorithm, &hKey, nullptr, 0, keyBytes, sizeof(keyBytes), 0);
-		if (status != STATUS_SUCCESS) {
-			std::cerr << "BCryptGenerateSymmetricKey failed: " << status << std::endl;
-			continue;
-		}
-
-		keys.push_back(hKey);
+	for (int j = 0; j < 8; ++j) {
+		keyBytes[j] = static_cast<BYTE>(dis(gen));
 	}
-	return keys;
+	BCRYPT_KEY_HANDLE hKey = nullptr;
+
+	NTSTATUS status = BCryptGenerateSymmetricKey(hAlgorithm, &hKey, nullptr, 0, keyBytes, sizeof(keyBytes), 0);
+	if (status != STATUS_SUCCESS) {
+		std::cerr << "BCryptGenerateSymmetricKey failed: " << status << std::endl;
+		return nullptr;
+	}
+
+	return hKey;
 }
 
-std::vector<BCRYPT_KEY_HANDLE> generateAscendingKeys(BCRYPT_ALG_HANDLE hAlgorithm, const uint64_t& start, const uint64_t& end) {
-	std::vector<BCRYPT_KEY_HANDLE> keys;
-
-	BYTE keyBytes[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-
-	for (uint64_t i = start; i < end; ++i) {
-		for (uint64_t j = 0; j < 8; ++j) {
-			keyBytes[7-j] = static_cast<BYTE>((i >> (56 - j * 8)) & 0xFF);
-		}
-
-		BCRYPT_KEY_HANDLE hKey = nullptr;
-		NTSTATUS status = BCryptGenerateSymmetricKey(hAlgorithm, &hKey, nullptr, 0, keyBytes, sizeof(keyBytes), 0);
-		if (status != STATUS_SUCCESS) {
-			std::cerr << "BCryptGenerateSymmetricKey failed: " << status << std::endl;
-			continue;
-		}
-
-		keys.push_back(hKey);
+BCRYPT_KEY_HANDLE generateKey(BCRYPT_ALG_HANDLE hAlgorithm, uint64_t& i, uint64_t& step, const uint8_t mode) {
+	switch (mode) {
+		case 0:
+			return generateAscendingKey(hAlgorithm, i);
+		case 1:
+			return generateDescendingKey(hAlgorithm, i);
+		case 2:
+			i+= (step - 1);
+			return generateAscendingKey(hAlgorithm, i);
+		case 3:
+			return generateRandomKey(hAlgorithm);
 	}
-	return keys;
-}
-
-std::vector<BCRYPT_KEY_HANDLE> generateDescendingKeys(BCRYPT_ALG_HANDLE hAlgorithm, const uint64_t& start, const uint64_t& end) {
-	std::vector<BCRYPT_KEY_HANDLE> keys;
-
-	BYTE keyBytes[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-
-	for (uint64_t i = std::numeric_limits<uint64_t>::max() - start; i > std::numeric_limits<uint64_t>::max() - end; --i) {
-		for (uint64_t j = 0; j < 8; ++j) {
-			keyBytes[7-j] = static_cast<BYTE>((i >> (56 - j * 8)) & 0xFF);
-		}
-
-		BCRYPT_KEY_HANDLE hKey = nullptr;
-		NTSTATUS status = BCryptGenerateSymmetricKey(hAlgorithm, &hKey, nullptr, 0, keyBytes, sizeof(keyBytes), 0);
-		if (status != STATUS_SUCCESS) {
-			std::cerr << "BCryptGenerateSymmetricKey failed: " << status << std::endl;
-			continue;
-		}
-
-		keys.push_back(hKey);
-	}
-	return keys;
-}
-
-std::vector<BCRYPT_KEY_HANDLE> generateSteppedKeys(BCRYPT_ALG_HANDLE hAlgorithm, const uint64_t& start, const uint64_t& end, const uint64_t steps)
-{
-	std::vector<BCRYPT_KEY_HANDLE> keys;
-
-	BYTE keyBytes[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-
-	for (uint64_t i = start; i < end; i += steps) {
-		for (uint64_t j = 0; j < 8; ++j) {
-			keyBytes[7-j] = static_cast<BYTE>((i >> (56 - j * 8)) & 0xFF);
-		}
-
-		BCRYPT_KEY_HANDLE hKey = nullptr;
-		NTSTATUS status = BCryptGenerateSymmetricKey(hAlgorithm, &hKey, nullptr, 0, keyBytes, sizeof(keyBytes), 0);
-		if (status != STATUS_SUCCESS) {
-			std::cerr << "BCryptGenerateSymmetricKey failed: " << status << std::endl;
-			continue;
-		}
-
-		keys.push_back(hKey);
-	}
-	return keys;
+	return generateAscendingKey(hAlgorithm, i);
 }

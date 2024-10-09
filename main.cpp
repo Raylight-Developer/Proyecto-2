@@ -16,7 +16,7 @@ int main(int argc, char** argv) {
 		} else if (strcmp(argv[i], "--sequential") == 0 && i + 1 < argc) {
 			sequential = std::stoi(argv[++i]);
 		 }else if (strcmp(argv[i], "--key-gen-mode") == 0 && i + 1 < argc) {
-			key_gen_mode = std::stoul(argv[++i]);
+			key_gen_mode = static_cast<uint8_t>(std::stoul(argv[++i]));
 		} else if (strcmp(argv[i], "--key-count") == 0 && i + 1 < argc) {
 			key_count = std::stoull(argv[++i]);
 		} else if (strcmp(argv[i], "--key-step") == 0 && i + 1 < argc) {
@@ -48,12 +48,11 @@ int main(int argc, char** argv) {
 	}
 
 	if (parallel) {
-		std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
+		int rank, num_processes;
 		MPI_Init(&argc, &argv);
 
-		int rank, size;
 		MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-		MPI_Comm_size(MPI_COMM_WORLD, &size);
+		MPI_Comm_size(MPI_COMM_WORLD, &num_processes);
 
 		BCRYPT_ALG_HANDLE hAlgorithm;
 		BCRYPT_KEY_HANDLE hKey;
@@ -82,18 +81,6 @@ int main(int argc, char** argv) {
 			BCryptCloseAlgorithmProvider(hAlgorithm, 0);
 			return 1;
 		}
-
-		std::cout << "Key [ ";
-		for (BYTE b : keyBytes) {
-			printf("%02X ", b);
-		}
-		std::cout << "]" << std::endl;
-		std::cout << "Encrypted data [ ";
-		for (BYTE b : ciphertext) {
-			printf("%02X ", b);
-		}
-		std::cout << "]" << std::endl;
-
 		// Step 4: Decrypt the ciphertext
 		std::string decryptedText;
 		if (!DecryptDES(ciphertext, decryptedText, hKey)) {
@@ -103,61 +90,73 @@ int main(int argc, char** argv) {
 			return 1;
 		}
 
-		std::cout << "Decrypted text -> " << decryptedText << std::endl;
-		std::cout << "--------------------------------------------------------" << std::endl;
-
-		// Step 5: Brute force
-		uint64_t totalKeys = 1024;
-		uint64_t keysPerProcess = totalKeys / size;
-		uint64_t start = rank * keysPerProcess;
-		uint64_t end = (rank == size - 1) ? totalKeys : start + keysPerProcess;
-
-		std::string bruteDecryptedText;
-		BYTE bruteKeyBytes[8] = { 0 };
-		std::vector<BCRYPT_KEY_HANDLE> hKeys;
-		switch (key_gen_mode) {
-			case 0:
-				hKeys = generateAscendingKeys(hAlgorithm, start, end);
-				break;
-			case 1:
-				hKeys = generateDescendingKeys(hAlgorithm, start, end);
-				break;
-			case 2:
-				hKeys = generateSteppedKeys(hAlgorithm, start, end, key_step);
-				break;
-			case 3:
-				hKeys = generateRandomKeys(hAlgorithm, start, end);
-				break;
-		}
-
-		bool found = false;
-
-		// Each process tries its range of keys
-		for (BCRYPT_KEY_HANDLE key : hKeys) {
-			if (tryKey(ciphertext, bruteDecryptedText, key)) {
-				if (bruteDecryptedText == text) {
-					found = true;
-					std::cout << "Process [" << rank << "] [ ";
-					for (BYTE b : keyBytes) {
-						printf("%02X ", b);
-					}
-					std::cout << "] -> " << bruteDecryptedText << std::endl;
-					break;
-				}
+		if (rank == 0) {
+			std::cout << "--------------------------------------------------------" << std::endl;
+			std::cout << "Key [ ";
+			for (BYTE b : keyBytes) {
+				printf("%02X ", b);
 			}
-		}
-		if (not found) {
-			std::cout << "Key Not Found" << std::endl;
+			std::cout << "]" << std::endl;
+			std::cout << "Encrypted data [ ";
+			for (BYTE b : ciphertext) {
+				printf("%02X ", b);
+			}
+			std::cout << "]" << std::endl;
+
+			std::cout << "Decrypted text -> " << decryptedText << std::endl;
+			std::cout << "--------------------------------------------------------" << std::endl;
 		}
 
-		// Clean up and finalize MPI
-		BCryptCloseAlgorithmProvider(hAlgorithm, 0);
-		MPI_Finalize();
+		std::chrono::high_resolution_clock::time_point start_time;
+		std::chrono::high_resolution_clock::time_point end_time;
 
-		std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
-		std::chrono::duration<double> delta_seconds = end_time - start_time;
-		std::cout << std::endl << "Delta time: " << delta_seconds.count() << " seconds" << std::endl;
-		std::cout << "--------------------------------------------------------" << std::endl;
+		MPI_Barrier(MPI_COMM_WORLD);
+		{
+			// Step 5: Brute force
+			uint64_t keysPerProcess = key_count / num_processes;
+			uint64_t start = rank * keysPerProcess;
+			uint64_t end = (rank == num_processes - 1) ? key_count : start + keysPerProcess;
+
+			std::string bruteDecryptedText;
+			bool found = false;
+			// Each process tries its range of keys
+			start_time = std::chrono::high_resolution_clock::now();
+
+			for (uint64_t i = start; i < end; i++) {
+				BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_step, key_gen_mode);
+				if (tryKey(ciphertext, bruteDecryptedText, key)) {
+					if (bruteDecryptedText == text) {
+						found = true;
+
+						std::cout << "Process [" << rank << "] [ ";
+						for (BYTE b : keyBytes) {
+							printf("%02X ", b);
+						}
+						std::cout << "] -> " << bruteDecryptedText << std::endl;
+						break;
+					}
+				}
+				delete key;
+			}
+			int foundFlag = found ? 1 : 0;
+			int globalFoundFlag = 0;
+			MPI_Allreduce(&foundFlag, &globalFoundFlag, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+			if (globalFoundFlag ==  0 and rank == 0) {
+				std::cout << "Key Not Found" << std::endl;
+			}
+
+			// Clean up and finalize MPI
+			BCryptCloseAlgorithmProvider(hAlgorithm, 0);
+			MPI_Finalize();
+		}
+
+		end_time = std::chrono::high_resolution_clock::now();
+
+		if (rank == 0) {
+			double openmpi_seconds = std::chrono::duration<double> (end_time - start_time).count();
+			std::cout << std::endl << "Open MPI time: " << openmpi_seconds << " seconds" << std::endl;
+		}
 		return 0;
 	}
 	else if (sequential) {
@@ -189,6 +188,16 @@ int main(int argc, char** argv) {
 			return 1;
 		}
 
+		// Step 4: Decrypt the ciphertext
+		std::string decryptedText;
+		if (!DecryptDES(ciphertext, decryptedText, hKey)) {
+			std::cerr << "Decryption failed" << std::endl;
+			BCryptDestroyKey(hKey);
+			BCryptCloseAlgorithmProvider(hAlgorithm, 0);
+			return 1;
+		}
+
+		std::cout << "--------------------------------------------------------" << std::endl;
 		std::cout << "Key [ ";
 		for (BYTE b : keyBytes) {
 			printf("%02X ", b);
@@ -200,38 +209,15 @@ int main(int argc, char** argv) {
 		}
 		std::cout << "]" << std::endl;
 
-		// Step 4: Decrypt the ciphertext
-		std::string decryptedText;
-		if (!DecryptDES(ciphertext, decryptedText, hKey)) {
-			std::cerr << "Decryption failed" << std::endl;
-			BCryptDestroyKey(hKey);
-			BCryptCloseAlgorithmProvider(hAlgorithm, 0);
-			return 1;
-		}
-
 		std::cout << "Decrypted text -> " << decryptedText << std::endl;
 		std::cout << "--------------------------------------------------------" << std::endl;
 
 		// Step 5: Brute force
+		bool found = false;
 		std::string bruteDecryptedText;
-		std::vector<BCRYPT_KEY_HANDLE> hKeys;
-		switch (key_gen_mode) {
-			case 0:
-				hKeys = generateAscendingKeys(hAlgorithm, 0, key_count);
-				break;
-			case 1:
-				hKeys = generateDescendingKeys(hAlgorithm, 0, key_count);
-				break;
-			case 2:
-				hKeys = generateSteppedKeys(hAlgorithm, 0, key_count, key_step);
-				break;
-			case 3:
-				hKeys = generateRandomKeys(hAlgorithm, 0, key_count);
-				break;
-		}
-
 		std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
-		for (BCRYPT_KEY_HANDLE key : hKeys) {
+		for (uint64_t i = 0; i < key_count; i++) {
+			BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_step, key_gen_mode);
 			if (tryKey(ciphertext, bruteDecryptedText, key)) {
 				if (bruteDecryptedText == text) {
 					std::cout << "BruteForce  [ ";
@@ -239,14 +225,19 @@ int main(int argc, char** argv) {
 						printf("%02X ", b);
 					}
 					std::cout << "] -> " << bruteDecryptedText << std::endl;
+					found = true;
 					break;
 				}
 			}
+			delete key;
+		}
+		if (not found) {
+			std::cout << "Key Not Found" << std::endl;
 		}
 
 		std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
 		std::chrono::duration<double> delta_seconds = end_time - start_time;
-		std::cout << std::endl << "Delta time: " << delta_seconds.count() << " seconds" << std::endl;
+		std::cout << std::endl << "Sequential time: " << delta_seconds.count() << " seconds" << std::endl;
 		std::cout << "--------------------------------------------------------" << std::endl;
 		// Clean up
 		BCryptDestroyKey(hKey);
@@ -302,6 +293,7 @@ int main(int argc, char** argv) {
 		double sequential_seconds;
 
 		if (rank == 0) {
+			std::cout << "--------------------------------------------------------" << std::endl;
 			std::cout << "Key [ ";
 			for (BYTE b : keyBytes) {
 				printf("%02X ", b);
@@ -319,25 +311,10 @@ int main(int argc, char** argv) {
 			// Step 5: Brute force
 			bool found = false;
 			std::string bruteDecryptedText;
-			std::vector<BCRYPT_KEY_HANDLE> hKeys;
-			switch (key_gen_mode) {
-				case 0:
-					hKeys = generateAscendingKeys(hAlgorithm, 0, key_count);
-					break;
-				case 1:
-					hKeys = generateDescendingKeys(hAlgorithm, 0, key_count);
-					break;
-				case 2:
-					hKeys = generateSteppedKeys(hAlgorithm, 0, key_count, key_step);
-					break;
-				case 3:
-					hKeys = generateRandomKeys(hAlgorithm, 0, key_count);
-					break;
-			}
-
 
 			start_time = std::chrono::high_resolution_clock::now();
-			for (BCRYPT_KEY_HANDLE key : hKeys) {
+			for (uint64_t i = 0; i < key_count; i++) {
+				BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_step, key_gen_mode);
 				if (tryKey(ciphertext, bruteDecryptedText, key)) {
 					if (bruteDecryptedText == text) {
 						found = true;
@@ -349,6 +326,7 @@ int main(int argc, char** argv) {
 						break;
 					}
 				}
+				delete key;
 			}
 			if (not found) {
 				std::cout << "Key Not Found" << std::endl;
@@ -368,27 +346,13 @@ int main(int argc, char** argv) {
 			uint64_t end = (rank == num_processes - 1) ? key_count : start + keysPerProcess;
 
 			std::string bruteDecryptedText;
-			std::vector<BCRYPT_KEY_HANDLE> hKeys;
-			switch (key_gen_mode) {
-				case 0:
-					hKeys = generateAscendingKeys(hAlgorithm, start, end);
-					break;
-				case 1:
-					hKeys = generateDescendingKeys(hAlgorithm, start, end);
-					break;
-				case 2:
-					hKeys = generateSteppedKeys(hAlgorithm, start, end, key_step);
-					break;
-				case 3:
-					hKeys = generateRandomKeys(hAlgorithm, start, end);
-					break;
-			}
 
 			bool found = false;
 			// Each process tries its range of keys
 			start_time = std::chrono::high_resolution_clock::now();
 
-			for (BCRYPT_KEY_HANDLE key : hKeys) {
+			for (uint64_t i = start; i < end; i++) {
+				BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_step, key_gen_mode);
 				if (tryKey(ciphertext, bruteDecryptedText, key)) {
 					if (bruteDecryptedText == text) {
 						found = true;
@@ -401,6 +365,7 @@ int main(int argc, char** argv) {
 						break;
 					}
 				}
+				delete key;
 			}
 			int foundFlag = found ? 1 : 0;
 			int globalFoundFlag = 0;
