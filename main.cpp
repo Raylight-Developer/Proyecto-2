@@ -7,7 +7,7 @@ int main(int argc, char** argv) {
 	std::string text_file = "./input.txt";
 	uint8_t key_gen_mode = 0;
 	uint64_t key_step = 1;
-	uint64_t key_count = 1024 * 1024;
+	uint64_t key_count = 0;
 	BYTE keyBytes[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
 	for (int i = 1; i < argc; ++i) {
@@ -32,6 +32,9 @@ int main(int argc, char** argv) {
 		} else {
 			std::cerr << "Unknown or incomplete argument: " << argv[i] << std::endl;
 		}
+	}
+	if (key_count == 0) {
+		key_count = std::numeric_limits<uint64_t>::max();
 	}
 
 	if (text == "") {

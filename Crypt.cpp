@@ -151,7 +151,7 @@ BCRYPT_KEY_HANDLE generateKey(BCRYPT_ALG_HANDLE hAlgorithm, uint64_t& i, uint64_
 		case 1:
 			return generateDescendingKey(hAlgorithm, i);
 		case 2:
-			i+= (step - 1);
+			i += (step - 1);
 			return generateAscendingKey(hAlgorithm, i);
 		case 3:
 			return generateRandomKey(hAlgorithm);
