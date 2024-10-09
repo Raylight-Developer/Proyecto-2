@@ -1,16 +1,5 @@
 #include "Crypt.hpp"
 
-/**
- * @brief Main function to perform encryption, decryption, and brute force attack using DES algorithm.
- * 
- * The program can be run in parallel using MPI or sequentially. It supports key generation in different
- * modes and the option to provide text directly or through a file. The program also measures performance
- * metrics when executed in parallel.
- * 
- * @param argc Number of command line arguments.
- * @param argv Array of command line arguments.
- * @return int Returns 0 on success, 1 on failure.
- */
 int main(int argc, char** argv) {
 	bool parallel = false;
 	bool sequential = false;
@@ -428,7 +417,16 @@ int main(int argc, char** argv) {
 
 		end_time = std::chrono::high_resolution_clock::now();
 
-	
+		if (rank == 0) {
+			double openmpi_seconds = std::chrono::duration<double> (end_time - start_time).count();
+			std::cout << std::endl << "Open MPI Delta time: " << openmpi_seconds << " seconds" << std::endl;
+			std::cout << "--------------------------------------------------------" << std::endl;
+			std::cout << "Performance Metrics" << std::endl;
+			std::cout << std::setprecision(2) << "    Speedup: " << (sequential_seconds / openmpi_seconds) * 100.0 - 100.0 << "%" << std::endl;
+			std::cout << std::setprecision(5) << "    Efficiency: " << sequential_seconds / (double(num_processes) * openmpi_seconds) << std::endl;
+			std::cout << std::setprecision(5) << "    Effectivity: " << (sequential_seconds / openmpi_seconds) / (double(num_processes) * openmpi_seconds) << std::endl;
+			std::cout << "--------------------------------------------------------" << std::endl;
+		}
 		return 0;
 	}
 }
