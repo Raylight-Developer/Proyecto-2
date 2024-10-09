@@ -7,7 +7,7 @@ int main(int argc, char** argv) {
 	std::string text_file = "./input.txt";
 	uint8_t key_gen_mode = 0;
 	uint64_t key_step = 1;
-	uint64_t key_count = 0;
+	uint64_t key_count = std::numeric_limits<uint64_t>::max();
 	BYTE keyBytes[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
 	for (int i = 1; i < argc; ++i) {
@@ -32,9 +32,6 @@ int main(int argc, char** argv) {
 		} else {
 			std::cerr << "Unknown or incomplete argument: " << argv[i] << std::endl;
 		}
-	}
-	if (key_count == 0) {
-		key_count = std::numeric_limits<uint64_t>::max();
 	}
 
 	if (text == "") {
@@ -121,31 +118,29 @@ int main(int argc, char** argv) {
 			uint64_t end = (rank == num_processes - 1) ? key_count : start + keysPerProcess;
 
 			std::string bruteDecryptedText;
-			bool found = false;
-			// Each process tries its range of keys
-			start_time = std::chrono::high_resolution_clock::now();
 
+			int found = 0;
+			int global_found = 0;
+			start_time = std::chrono::high_resolution_clock::now();
 			for (uint64_t i = start; i < end; i++) {
 				BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_step, key_gen_mode);
 				if (tryKey(ciphertext, bruteDecryptedText, key)) {
 					if (bruteDecryptedText == text) {
-						found = true;
-
 						std::cout << "Process [" << rank << "] [ ";
 						for (BYTE b : keyBytes) {
 							printf("%02X ", b);
 						}
 						std::cout << "] -> " << bruteDecryptedText << std::endl;
-						break;
+						found = 1;
 					}
 				}
 				delete key;
+				MPI_Allreduce(&found, &global_found, 1, MPI_INT, MPI_LOR, MPI_COMM_WORLD);
+				if (global_found) {
+					break;
+				}
 			}
-			int foundFlag = found ? 1 : 0;
-			int globalFoundFlag = 0;
-			MPI_Allreduce(&foundFlag, &globalFoundFlag, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-
-			if (globalFoundFlag ==  0 and rank == 0) {
+			if (global_found == 0 and rank == 0) {
 				std::cout << "Key Not Found" << std::endl;
 			}
 
@@ -320,12 +315,12 @@ int main(int argc, char** argv) {
 				BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_step, key_gen_mode);
 				if (tryKey(ciphertext, bruteDecryptedText, key)) {
 					if (bruteDecryptedText == text) {
-						found = true;
 						std::cout << "BruteForce  [ ";
 						for (BYTE b : keyBytes) {
 							printf("%02X ", b);
 						}
 						std::cout << "] -> " << bruteDecryptedText << std::endl;
+						found = true;
 						break;
 					}
 				}
@@ -350,31 +345,28 @@ int main(int argc, char** argv) {
 
 			std::string bruteDecryptedText;
 
-			bool found = false;
-			// Each process tries its range of keys
+			int found = 0;
+			int global_found = 0;
 			start_time = std::chrono::high_resolution_clock::now();
-
 			for (uint64_t i = start; i < end; i++) {
 				BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_step, key_gen_mode);
 				if (tryKey(ciphertext, bruteDecryptedText, key)) {
 					if (bruteDecryptedText == text) {
-						found = true;
-
 						std::cout << "Process [" << rank << "] [ ";
 						for (BYTE b : keyBytes) {
 							printf("%02X ", b);
 						}
 						std::cout << "] -> " << bruteDecryptedText << std::endl;
-						break;
+						found = 1;
 					}
 				}
 				delete key;
+				MPI_Allreduce(&found, &global_found, 1, MPI_INT, MPI_LOR, MPI_COMM_WORLD);
+				if (global_found) {
+					break;
+				}
 			}
-			int foundFlag = found ? 1 : 0;
-			int globalFoundFlag = 0;
-			MPI_Allreduce(&foundFlag, &globalFoundFlag, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-
-			if (globalFoundFlag ==  0 and rank == 0) {
+			if (global_found == 0 and rank == 0) {
 				std::cout << "Key Not Found" << std::endl;
 			}
 
