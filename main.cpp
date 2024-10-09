@@ -1,5 +1,16 @@
 #include "Crypt.hpp"
 
+/**
+ * @brief Main function to perform encryption, decryption, and brute force attack using DES algorithm.
+ * 
+ * The program can be run in parallel using MPI or sequentially. It supports key generation in different
+ * modes and the option to provide text directly or through a file. The program also measures performance
+ * metrics when executed in parallel.
+ * 
+ * @param argc Number of command line arguments.
+ * @param argv Array of command line arguments.
+ * @return int Returns 0 on success, 1 on failure.
+ */
 int main(int argc, char** argv) {
 	bool parallel = false;
 	bool sequential = false;
