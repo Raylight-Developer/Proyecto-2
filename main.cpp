@@ -1,133 +1,10 @@
-#include <iostream>
-#include <iomanip>
-#include <random>
-#include <vector>
-#include <chrono>
-#include <string>
-
-#include <windows.h>
-#include <bcrypt.h>
-#include <mpi.h>
-
-#pragma comment(lib, "bcrypt.lib")
-#define STATUS_SUCCESS ((NTSTATUS)0x00000000L)
-
-bool EncryptDES(const std::string& plaintext, std::vector<BYTE>& ciphertext, BCRYPT_KEY_HANDLE hKey) {
-	DWORD dataLen = static_cast<DWORD>(plaintext.size());
-	DWORD bufferSize = dataLen;
-	ciphertext.resize(bufferSize);
-
-	memcpy(ciphertext.data(), plaintext.data(), dataLen);
-
-	ULONG resultSize = 0;
-	if (BCryptEncrypt(hKey, (PUCHAR)ciphertext.data(), dataLen, nullptr, nullptr, 0, nullptr, 0, &resultSize, BCRYPT_BLOCK_PADDING) != STATUS_SUCCESS) {
-		std::cerr << "BCryptEncrypt (size estimation) failed." << std::endl;
-		return false;
-	}
-
-	ciphertext.resize(resultSize);
-
-	if (BCryptEncrypt(hKey, (PUCHAR)ciphertext.data(), dataLen, nullptr, nullptr, 0, ciphertext.data(), resultSize, &resultSize, BCRYPT_BLOCK_PADDING) != STATUS_SUCCESS) {
-		std::cerr << "BCryptEncrypt failed." << std::endl;
-		return false;
-	}
-
-	ciphertext.resize(resultSize);
-	return true;
-}
-
-bool DecryptDES(const std::vector<BYTE>& ciphertext, std::string& plaintext, BCRYPT_KEY_HANDLE hKey) {
-	DWORD dataLen = static_cast<DWORD>(ciphertext.size());
-	std::vector<BYTE> buffer = ciphertext;
-
-	ULONG resultSize = 0;
-	if (BCryptDecrypt(hKey, (PUCHAR)buffer.data(), dataLen, nullptr, nullptr, 0, nullptr, 0, &resultSize, BCRYPT_BLOCK_PADDING) != STATUS_SUCCESS) {
-		std::cerr << "BCryptDecrypt (size estimation) failed." << std::endl;
-		return false;
-	}
-
-	buffer.resize(resultSize);
-
-	if (BCryptDecrypt(hKey, (PUCHAR)buffer.data(), dataLen, nullptr, nullptr, 0, buffer.data(), resultSize, &resultSize, BCRYPT_BLOCK_PADDING) != STATUS_SUCCESS) {
-		std::cerr << "BCryptDecrypt failed." << std::endl;
-		return false;
-	}
-
-	plaintext.assign(buffer.begin(), buffer.begin() + resultSize);
-	return true;
-}
-
-bool tryKey(const std::vector<BYTE>& ciphertext, std::string& decryptedText, BCRYPT_KEY_HANDLE hKey) {
-	DWORD dataLen = static_cast<DWORD>(ciphertext.size());
-	std::vector<BYTE> buffer = ciphertext;
-
-	ULONG resultSize = 0;
-	if (BCryptDecrypt(hKey, (PUCHAR)buffer.data(), dataLen, nullptr, nullptr, 0, nullptr, 0, &resultSize, BCRYPT_BLOCK_PADDING) != STATUS_SUCCESS) {
-		return false;
-	}
-
-	buffer.resize(resultSize);
-	if (BCryptDecrypt(hKey, (PUCHAR)buffer.data(), dataLen, nullptr, nullptr, 0, buffer.data(), resultSize, &resultSize, BCRYPT_BLOCK_PADDING) != STATUS_SUCCESS) {
-		return false;
-	}
-
-	decryptedText.assign(buffer.begin(), buffer.begin() + resultSize);
-	return true;
-}
-
-std::vector<BCRYPT_KEY_HANDLE> generateRandomKeys(BCRYPT_ALG_HANDLE hAlgorithm, const uint64_t& start, const uint64_t& end) {
-	std::vector<BCRYPT_KEY_HANDLE> keys;
-
-	BYTE keyBytes[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-
-	std::random_device rd;
-	std::mt19937 gen(rd());
-	std::uniform_int_distribution<int> dis(0, 255);
-
-
-	for (uint64_t i = start; i < end; ++i) {
-		for (int j = 0; j < 8; ++j) {
-			keyBytes[j] = static_cast<BYTE>(dis(gen));
-		}
-		BCRYPT_KEY_HANDLE hKey = nullptr;
-
-		NTSTATUS status = BCryptGenerateSymmetricKey(hAlgorithm, &hKey, nullptr, 0, keyBytes, sizeof(keyBytes), 0);
-		if (status != STATUS_SUCCESS) {
-			std::cerr << "BCryptGenerateSymmetricKey failed: " << status << std::endl;
-			continue;
-		}
-
-		keys.push_back(hKey);
-	}
-	return keys;
-}
-
-std::vector<BCRYPT_KEY_HANDLE> generateOrderedKeys(BCRYPT_ALG_HANDLE hAlgorithm, const uint64_t& start, const uint64_t& end) {
-	std::vector<BCRYPT_KEY_HANDLE> keys;
-
-	BYTE keyBytes[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-
-	for (uint64_t i = start; i < end; ++i) {
-		for (uint64_t j = 0; j < 8; ++j) {
-			keyBytes[7-j] = static_cast<BYTE>((i >> (56 - j * 8)) & 0xFF);
-		}
-
-		BCRYPT_KEY_HANDLE hKey = nullptr;
-		NTSTATUS status = BCryptGenerateSymmetricKey(hAlgorithm, &hKey, nullptr, 0, keyBytes, sizeof(keyBytes), 0);
-		if (status != STATUS_SUCCESS) {
-			std::cerr << "BCryptGenerateSymmetricKey failed: " << status << std::endl;
-			continue;
-		}
-
-		keys.push_back(hKey);
-	}
-	return keys;
-}
+#include "Crypt.hpp"
 
 int main(int argc, char** argv) {
 	bool parallel = false;
 	bool sequential = false;
-	bool random_keys = false;
+	uint8_t key_gen_mode = 0;
+	uint64_t key_step = 1;
 	uint64_t key_count = 1024 * 1024;
 	BYTE keyBytes[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
@@ -136,10 +13,12 @@ int main(int argc, char** argv) {
 			parallel = std::stoi(argv[++i]);
 		} else if (strcmp(argv[i], "--sequential") == 0 && i + 1 < argc) {
 			sequential = std::stoi(argv[++i]);
-		 }else if (strcmp(argv[i], "--random") == 0 && i + 1 < argc) {
-			random_keys = std::stoi(argv[++i]);
+		 }else if (strcmp(argv[i], "--key-gen-mode") == 0 && i + 1 < argc) {
+			key_gen_mode = std::stoul(argv[++i]);
 		} else if (strcmp(argv[i], "--key-count") == 0 && i + 1 < argc) {
 			key_count = std::stoull(argv[++i]);
+		} else if (strcmp(argv[i], "--key-step") == 0 && i + 1 < argc) {
+			key_step = std::stoull(argv[++i]);
 		} else if (strcmp(argv[i], "--key") == 0 && i + 8 < argc) {
 			for (int j = 0; j < 8; ++j) {
 				keyBytes[j] =static_cast<BYTE>(std::stoi(argv[++i], nullptr, 16));
@@ -217,11 +96,19 @@ int main(int argc, char** argv) {
 		std::string bruteDecryptedText;
 		BYTE bruteKeyBytes[8] = { 0 };
 		std::vector<BCRYPT_KEY_HANDLE> hKeys;
-		if (random_keys) {
-			hKeys = generateRandomKeys(hAlgorithm, start, end);
-		}
-		else {
-			hKeys = generateOrderedKeys(hAlgorithm, start, end);
+		switch (key_gen_mode) {
+			case 0:
+				hKeys = generateAscendingKeys(hAlgorithm, start, end);
+				break;
+			case 1:
+				hKeys = generateDescendingKeys(hAlgorithm, start, end);
+				break;
+			case 2:
+				hKeys = generateSteppedKeys(hAlgorithm, start, end, key_step);
+				break;
+			case 3:
+				hKeys = generateRandomKeys(hAlgorithm, start, end);
+				break;
 		}
 
 		bool found = false;
@@ -310,11 +197,19 @@ int main(int argc, char** argv) {
 		// Step 5: Brute force
 		std::string bruteDecryptedText;
 		std::vector<BCRYPT_KEY_HANDLE> hKeys;
-		if (random_keys) {
-			hKeys = generateRandomKeys(hAlgorithm, 0, key_count);
-		}
-		else {
-			hKeys = generateOrderedKeys(hAlgorithm, 0, key_count);
+		switch (key_gen_mode) {
+			case 0:
+				hKeys = generateAscendingKeys(hAlgorithm, 0, key_count);
+				break;
+			case 1:
+				hKeys = generateDescendingKeys(hAlgorithm, 0, key_count);
+				break;
+			case 2:
+				hKeys = generateSteppedKeys(hAlgorithm, 0, key_count, key_step);
+				break;
+			case 3:
+				hKeys = generateRandomKeys(hAlgorithm, 0, key_count);
+				break;
 		}
 
 		std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
@@ -408,12 +303,21 @@ int main(int argc, char** argv) {
 			bool found = false;
 			std::string bruteDecryptedText;
 			std::vector<BCRYPT_KEY_HANDLE> hKeys;
-			if (random_keys) {
-				hKeys = generateRandomKeys(hAlgorithm, 0, key_count);
+			switch (key_gen_mode) {
+				case 0:
+					hKeys = generateAscendingKeys(hAlgorithm, 0, key_count);
+					break;
+				case 1:
+					hKeys = generateDescendingKeys(hAlgorithm, 0, key_count);
+					break;
+				case 2:
+					hKeys = generateSteppedKeys(hAlgorithm, 0, key_count, key_step);
+					break;
+				case 3:
+					hKeys = generateRandomKeys(hAlgorithm, 0, key_count);
+					break;
 			}
-			else {
-				hKeys = generateOrderedKeys(hAlgorithm, 0, key_count);
-			}
+
 
 			start_time = std::chrono::high_resolution_clock::now();
 			for (BCRYPT_KEY_HANDLE key : hKeys) {
@@ -448,11 +352,19 @@ int main(int argc, char** argv) {
 
 			std::string bruteDecryptedText;
 			std::vector<BCRYPT_KEY_HANDLE> hKeys;
-			if (random_keys) {
-				hKeys = generateRandomKeys(hAlgorithm, start, end);
-			}
-			else {
-				hKeys = generateOrderedKeys(hAlgorithm, start, end);
+			switch (key_gen_mode) {
+				case 0:
+					hKeys = generateAscendingKeys(hAlgorithm, start, end);
+					break;
+				case 1:
+					hKeys = generateDescendingKeys(hAlgorithm, start, end);
+					break;
+				case 2:
+					hKeys = generateSteppedKeys(hAlgorithm, start, end, key_step);
+					break;
+				case 3:
+					hKeys = generateRandomKeys(hAlgorithm, start, end);
+					break;
 			}
 
 			bool found = false;
