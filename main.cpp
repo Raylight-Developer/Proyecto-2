@@ -3,6 +3,8 @@
 int main(int argc, char** argv) {
 	bool parallel = false;
 	bool sequential = false;
+	std::string text = "";
+	std::string text_file = "./input.txt";
 	uint8_t key_gen_mode = 0;
 	uint64_t key_step = 1;
 	uint64_t key_count = 1024 * 1024;
@@ -19,6 +21,10 @@ int main(int argc, char** argv) {
 			key_count = std::stoull(argv[++i]);
 		} else if (strcmp(argv[i], "--key-step") == 0 && i + 1 < argc) {
 			key_step = std::stoull(argv[++i]);
+		} else if (strcmp(argv[i], "--text") == 0 && i + 1 < argc) {
+			text = argv[++i];
+		} else if (strcmp(argv[i], "--text-file") == 0 && i + 1 < argc) {
+			text_file = argv[++i];
 		} else if (strcmp(argv[i], "--key") == 0 && i + 8 < argc) {
 			for (int j = 0; j < 8; ++j) {
 				keyBytes[j] =static_cast<BYTE>(std::stoi(argv[++i], nullptr, 16));
@@ -27,6 +33,20 @@ int main(int argc, char** argv) {
 			std::cerr << "Unknown or incomplete argument: " << argv[i] << std::endl;
 		}
 	}
+
+	if (text == "") {
+		std::ifstream file(text_file);
+		if (!file.is_open()) {
+			std::cerr << "Error opening file!" << std::endl;
+			return 1;
+		}
+
+		std::stringstream buffer;
+		buffer << file.rdbuf();
+		text = buffer.str();
+		file.close();
+	}
+
 	if (parallel) {
 		std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
 		MPI_Init(&argc, &argv);
@@ -55,9 +75,8 @@ int main(int argc, char** argv) {
 		}
 
 		// Step 3: Encrypt the plaintext
-		std::string plaintext = "Hello, DES Encryption!";
 		std::vector<BYTE> ciphertext;
-		if (!EncryptDES(plaintext, ciphertext, hKey)) {
+		if (!EncryptDES(text, ciphertext, hKey)) {
 			std::cerr << "Encryption failed" << std::endl;
 			BCryptDestroyKey(hKey);
 			BCryptCloseAlgorithmProvider(hAlgorithm, 0);
@@ -116,7 +135,7 @@ int main(int argc, char** argv) {
 		// Each process tries its range of keys
 		for (BCRYPT_KEY_HANDLE key : hKeys) {
 			if (tryKey(ciphertext, bruteDecryptedText, key)) {
-				if (bruteDecryptedText == plaintext) {
+				if (bruteDecryptedText == text) {
 					found = true;
 					std::cout << "Process [" << rank << "] [ ";
 					for (BYTE b : keyBytes) {
@@ -162,9 +181,8 @@ int main(int argc, char** argv) {
 		}
 
 		// Step 3: Encrypt the plaintext
-		std::string plaintext = "Hello, DES Encryption!";
 		std::vector<BYTE> ciphertext;
-		if (!EncryptDES(plaintext, ciphertext, hKey)) {
+		if (!EncryptDES(text, ciphertext, hKey)) {
 			std::cerr << "Encryption failed" << std::endl;
 			BCryptDestroyKey(hKey);
 			BCryptCloseAlgorithmProvider(hAlgorithm, 0);
@@ -215,7 +233,7 @@ int main(int argc, char** argv) {
 		std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
 		for (BCRYPT_KEY_HANDLE key : hKeys) {
 			if (tryKey(ciphertext, bruteDecryptedText, key)) {
-				if (bruteDecryptedText == plaintext) {
+				if (bruteDecryptedText == text) {
 					std::cout << "BruteForce  [ ";
 					for (BYTE b : keyBytes) {
 						printf("%02X ", b);
@@ -263,9 +281,8 @@ int main(int argc, char** argv) {
 		}
 
 		// Step 3: Encrypt the plaintext
-		std::string plaintext = "Hello, DES Encryption!";
 		std::vector<BYTE> ciphertext;
-		if (!EncryptDES(plaintext, ciphertext, hKey)) {
+		if (!EncryptDES(text, ciphertext, hKey)) {
 			std::cerr << "Encryption failed" << std::endl;
 			BCryptDestroyKey(hKey);
 			BCryptCloseAlgorithmProvider(hAlgorithm, 0);
@@ -322,7 +339,7 @@ int main(int argc, char** argv) {
 			start_time = std::chrono::high_resolution_clock::now();
 			for (BCRYPT_KEY_HANDLE key : hKeys) {
 				if (tryKey(ciphertext, bruteDecryptedText, key)) {
-					if (bruteDecryptedText == plaintext) {
+					if (bruteDecryptedText == text) {
 						found = true;
 						std::cout << "BruteForce  [ ";
 						for (BYTE b : keyBytes) {
@@ -373,7 +390,7 @@ int main(int argc, char** argv) {
 
 			for (BCRYPT_KEY_HANDLE key : hKeys) {
 				if (tryKey(ciphertext, bruteDecryptedText, key)) {
-					if (bruteDecryptedText == plaintext) {
+					if (bruteDecryptedText == text) {
 						found = true;
 
 						std::cout << "Process [" << rank << "] [ ";
