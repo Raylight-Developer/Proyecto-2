@@ -113,20 +113,16 @@ int main(int argc, char** argv) {
 		MPI_Barrier(MPI_COMM_WORLD);
 		{
 			// Step 5: Brute force
-			uint64_t keysPerProcess = key_count / num_processes;
-			uint64_t start = rank * keysPerProcess;
-			uint64_t end = (rank == num_processes - 1) ? key_count : start + keysPerProcess;
-
 			std::string bruteDecryptedText;
 
 			int found = 0;
 			int global_found = 0;
 			start_time = std::chrono::high_resolution_clock::now();
-			for (uint64_t i = start; i < end; i++) {
-				BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_step, key_gen_mode);
+			for (uint64_t i = rank * key_step; i < key_count; i += num_processes) {
+				BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_gen_mode);
 				if (tryKey(ciphertext, bruteDecryptedText, key)) {
 					if (bruteDecryptedText == text) {
-						std::cout << "Process [" << rank << "] [ ";
+						std::cout << "Process [" << rank << "] [" << i << "] [ ";
 						for (BYTE b : keyBytes) {
 							printf("%02X ", b);
 						}
@@ -214,11 +210,11 @@ int main(int argc, char** argv) {
 		bool found = false;
 		std::string bruteDecryptedText;
 		std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
-		for (uint64_t i = 0; i < key_count; i++) {
-			BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_step, key_gen_mode);
+		for (uint64_t i = 0; i < key_count; i += key_step) {
+			BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_gen_mode);
 			if (tryKey(ciphertext, bruteDecryptedText, key)) {
 				if (bruteDecryptedText == text) {
-					std::cout << "BruteForce  [ ";
+					std::cout << "BruteForce [" << i << "] [ ";
 					for (BYTE b : keyBytes) {
 						printf("%02X ", b);
 					}
@@ -311,11 +307,11 @@ int main(int argc, char** argv) {
 			std::string bruteDecryptedText;
 
 			start_time = std::chrono::high_resolution_clock::now();
-			for (uint64_t i = 0; i < key_count; i++) {
-				BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_step, key_gen_mode);
+			for (uint64_t i = 0; i < key_count; i += key_step) {
+				BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_gen_mode);
 				if (tryKey(ciphertext, bruteDecryptedText, key)) {
 					if (bruteDecryptedText == text) {
-						std::cout << "BruteForce  [ ";
+						std::cout << "BruteForce [" << i << "] [ ";
 						for (BYTE b : keyBytes) {
 							printf("%02X ", b);
 						}
@@ -339,20 +335,16 @@ int main(int argc, char** argv) {
 		MPI_Barrier(MPI_COMM_WORLD);
 		{
 			// Step 5: Brute force
-			uint64_t keysPerProcess = key_count / num_processes;
-			uint64_t start = rank * keysPerProcess;
-			uint64_t end = (rank == num_processes - 1) ? key_count : start + keysPerProcess;
-
 			std::string bruteDecryptedText;
 
 			int found = 0;
 			int global_found = 0;
 			start_time = std::chrono::high_resolution_clock::now();
-			for (uint64_t i = start; i < end; i++) {
-				BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_step, key_gen_mode);
+			for (uint64_t i = rank * key_step; i < key_count; i += num_processes) {
+				BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_gen_mode);
 				if (tryKey(ciphertext, bruteDecryptedText, key)) {
 					if (bruteDecryptedText == text) {
-						std::cout << "Process [" << rank << "] [ ";
+						std::cout << "Process [" << rank << "] [" << i << "] [ ";
 						for (BYTE b : keyBytes) {
 							printf("%02X ", b);
 						}
