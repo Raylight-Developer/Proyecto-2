@@ -1,24 +1,27 @@
 #include "Crypt.hpp"
 
-void showProgressBar(const float& progress) {
-	int barWidth = 50;
-	std::cout << "[";
-	int pos = barWidth * progress;
-	for (int i = 0; i < barWidth; ++i) {
-		if (i < pos)
-			std::cout << "=";
-		else if (i == pos)
-			std::cout << ">";
-		else
-			std::cout << " ";
+void showProgressBar(const float& progress, const bool& log) {
+	if (log){
+		int barWidth = 50;
+		std::cout << "[";
+		int pos = barWidth * progress;
+		for (int i = 0; i < barWidth; ++i) {
+			if (i < pos)
+				std::cout << "=";
+			else if (i == pos)
+				std::cout << ">";
+			else
+				std::cout << " ";
+		}
+		std::cout << "] " << int(progress * 100.0) << " %\r";
+		std::cout.flush();
 	}
-	std::cout << "] " << int(progress * 100.0) << " %\r";
-	std::cout.flush();
 }
 
 int main(int argc, char** argv) {
 	bool parallel = false;
 	bool sequential = false;
+	bool log = false;
 	std::string text = "";
 	std::string text_file = "./input.txt";
 	uint8_t key_gen_mode = 0;
@@ -35,6 +38,7 @@ int main(int argc, char** argv) {
 			key_gen_mode = static_cast<uint8_t>(std::stoul(argv[++i]));
 		} else if (strcmp(argv[i], "--key-count") == 0 && i + 1 < argc) {
 			key_count = std::stoull(argv[++i]);
+			log = true;
 		} else if (strcmp(argv[i], "--key-step") == 0 && i + 1 < argc) {
 			key_step = std::stoull(argv[++i]);
 		} else if (strcmp(argv[i], "--text") == 0 && i + 1 < argc) {
@@ -139,7 +143,7 @@ int main(int argc, char** argv) {
 				float currentProgress = static_cast<float>(i) / key_count;
 				if (currentProgress - lastProgress >= 0.02) {
 					if (rank == 0) {
-						showProgressBar(currentProgress); // Update progress bar
+						showProgressBar(currentProgress, log); // Update progress bar
 					}
 					lastProgress = currentProgress; // Update last displayed progress
 				}
@@ -161,7 +165,7 @@ int main(int argc, char** argv) {
 				}
 			}
 			if (global_found == 0 and rank == 0) {
-				showProgressBar(1.0f);
+				showProgressBar(1.0f, log);
 				std::cout << std::endl << "Key Not Found" << std::endl;
 			}
 
@@ -239,7 +243,7 @@ int main(int argc, char** argv) {
 		for (uint64_t i = 0; i < key_count; i += key_step) {
 			float currentProgress = static_cast<float>(i) / key_count;
 			if (currentProgress - lastProgress >= 0.02) {
-				showProgressBar(currentProgress); // Update progress bar
+				showProgressBar(currentProgress, log); // Update progress bar
 				lastProgress = currentProgress; // Update last displayed progress
 			}
 			BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_gen_mode);
@@ -257,7 +261,7 @@ int main(int argc, char** argv) {
 			delete key;
 		}
 		if (not found) {
-			showProgressBar(1.0f);
+			showProgressBar(1.0f, log);
 			std::cout << std::endl << "Key Not Found" << std::endl;
 		}
 
@@ -341,7 +345,7 @@ int main(int argc, char** argv) {
 			for (uint64_t i = 0; i < key_count; i += key_step) {
 				float currentProgress = static_cast<float>(i) / key_count;
 				if (currentProgress - lastProgress >= 0.02) {
-					showProgressBar(currentProgress); // Update progress bar
+					showProgressBar(currentProgress, log); // Update progress bar
 					lastProgress = currentProgress; // Update last displayed progress
 				}
 				BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_gen_mode);
@@ -359,7 +363,7 @@ int main(int argc, char** argv) {
 				delete key;
 			}
 			if (not found) {
-				showProgressBar(1.0f);
+				showProgressBar(1.0f, log);
 				std::cout << std::endl << "Key Not Found" << std::endl;
 			}
 
@@ -382,7 +386,7 @@ int main(int argc, char** argv) {
 				float currentProgress = static_cast<float>(i) / key_count;
 				if (currentProgress - lastProgress >= 0.02) {
 					if (rank == 0) {
-						showProgressBar(currentProgress); // Update progress bar
+						showProgressBar(currentProgress, log); // Update progress bar
 					}
 					lastProgress = currentProgress; // Update last displayed progress
 				}
@@ -404,7 +408,7 @@ int main(int argc, char** argv) {
 				}
 			}
 			if (global_found == 0 and rank == 0) {
-				showProgressBar(1.0f);
+				showProgressBar(1.0f, log);
 				std::cout << std::endl << "Key Not Found" << std::endl;
 			}
 
