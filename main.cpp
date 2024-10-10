@@ -1,8 +1,8 @@
 #include "Crypt.hpp"
 
-void showProgressBar(const float& progress, const bool& log) {
-	if (log){
-		int barWidth = 50;
+void showProgressBar(const float& progress, const uint64_t i, const bool& log) {
+	if (log) {
+		int barWidth = 100;
 		std::cout << "[";
 		int pos = barWidth * progress;
 		for (int i = 0; i < barWidth; ++i) {
@@ -13,7 +13,7 @@ void showProgressBar(const float& progress, const bool& log) {
 			else
 				std::cout << " ";
 		}
-		std::cout << "] " << int(progress * 100.0) << " %\r";
+		std::cout << "] " << int(progress * 100.0) << "% [" << i << "]\r";
 		std::cout.flush();
 	}
 }
@@ -28,6 +28,8 @@ int main(int argc, char** argv) {
 	uint64_t key_step = 1;
 	uint64_t key_count = std::numeric_limits<uint64_t>::max();
 	BYTE keyBytes[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+
+	const float update_step = 0.01;
 
 	for (int i = 1; i < argc; ++i) {
 		if (strcmp(argv[i], "--parallel") == 0 && i + 1 < argc) {
@@ -139,11 +141,14 @@ int main(int argc, char** argv) {
 			int global_found = 0;
 			start_time = std::chrono::high_resolution_clock::now();
 			float lastProgress = 0.0f;
+			if (rank == 0) {
+				showProgressBar(0.0f, 0, log);
+			}
 			for (uint64_t i = rank * key_step; i < key_count; i += num_processes) {
 				float currentProgress = static_cast<float>(i) / key_count;
-				if (currentProgress - lastProgress >= 0.02) {
+				if (currentProgress - lastProgress >= update_step) {
 					if (rank == 0) {
-						showProgressBar(currentProgress, log); // Update progress bar
+						showProgressBar(currentProgress, i, log); // Update progress bar
 					}
 					lastProgress = currentProgress; // Update last displayed progress
 				}
@@ -165,7 +170,7 @@ int main(int argc, char** argv) {
 				}
 			}
 			if (global_found == 0 and rank == 0) {
-				showProgressBar(1.0f, log);
+				showProgressBar(1.0f, key_count, log);
 				std::cout << std::endl << "Key Not Found" << std::endl;
 			}
 
@@ -240,10 +245,11 @@ int main(int argc, char** argv) {
 		float lastProgress = 0.0f;
 		std::string bruteDecryptedText;
 		std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
+		showProgressBar(0.0f, 0, log);
 		for (uint64_t i = 0; i < key_count; i += key_step) {
 			float currentProgress = static_cast<float>(i) / key_count;
-			if (currentProgress - lastProgress >= 0.02) {
-				showProgressBar(currentProgress, log); // Update progress bar
+			if (currentProgress - lastProgress >= update_step) {
+				showProgressBar(currentProgress, i, log); // Update progress bar
 				lastProgress = currentProgress; // Update last displayed progress
 			}
 			BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_gen_mode);
@@ -261,7 +267,7 @@ int main(int argc, char** argv) {
 			delete key;
 		}
 		if (not found) {
-			showProgressBar(1.0f, log);
+			showProgressBar(1.0f, key_count, log);
 			std::cout << std::endl << "Key Not Found" << std::endl;
 		}
 
@@ -341,11 +347,12 @@ int main(int argc, char** argv) {
 			bool found = false;
 			float lastProgress = 0.0f;
 			std::string bruteDecryptedText;
+			showProgressBar(0.0f, 0, log);
 			std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
 			for (uint64_t i = 0; i < key_count; i += key_step) {
 				float currentProgress = static_cast<float>(i) / key_count;
-				if (currentProgress - lastProgress >= 0.02) {
-					showProgressBar(currentProgress, log); // Update progress bar
+				if (currentProgress - lastProgress >= update_step) {
+					showProgressBar(currentProgress, i, log); // Update progress bar
 					lastProgress = currentProgress; // Update last displayed progress
 				}
 				BCRYPT_KEY_HANDLE key = generateKey(hAlgorithm, i, key_gen_mode);
@@ -363,7 +370,7 @@ int main(int argc, char** argv) {
 				delete key;
 			}
 			if (not found) {
-				showProgressBar(1.0f, log);
+				showProgressBar(1.0f, key_count, log);
 				std::cout << std::endl << "Key Not Found" << std::endl;
 			}
 
@@ -382,11 +389,14 @@ int main(int argc, char** argv) {
 			int global_found = 0;
 			start_time = std::chrono::high_resolution_clock::now();
 			float lastProgress = 0.0f;
+			if (rank == 0) {
+				showProgressBar(0.0f, 0, log);
+			}
 			for (uint64_t i = rank * key_step; i < key_count; i += num_processes) {
 				float currentProgress = static_cast<float>(i) / key_count;
-				if (currentProgress - lastProgress >= 0.02) {
+				if (currentProgress - lastProgress >= update_step) {
 					if (rank == 0) {
-						showProgressBar(currentProgress, log); // Update progress bar
+						showProgressBar(currentProgress, i, log); // Update progress bar
 					}
 					lastProgress = currentProgress; // Update last displayed progress
 				}
@@ -407,8 +417,9 @@ int main(int argc, char** argv) {
 					break;
 				}
 			}
+			MPI_Barrier(MPI_COMM_WORLD);
 			if (global_found == 0 and rank == 0) {
-				showProgressBar(1.0f, log);
+				showProgressBar(1.0f, key_count, log);
 				std::cout << std::endl << "Key Not Found" << std::endl;
 			}
 
