@@ -31,9 +31,9 @@ int main(int argc, char** argv) {
 
 	for (int i = 1; i < argc; ++i) {
 		if (strcmp(argv[i], "--parallel") == 0 && i + 1 < argc) {
-			parallel = true;
+			parallel = std::stoi(argv[++i]);
 		} else if (strcmp(argv[i], "--sequential") == 0 && i + 1 < argc) {
-			sequential = true;
+			sequential = std::stoi(argv[++i]);
 		 }else if (strcmp(argv[i], "--key-gen-mode") == 0 && i + 1 < argc) {
 			key_gen_mode = static_cast<uint8_t>(std::stoul(argv[++i]));
 		} else if (strcmp(argv[i], "--key-count") == 0 && i + 1 < argc) {
